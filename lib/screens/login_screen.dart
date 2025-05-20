@@ -1,7 +1,7 @@
-// lib/screens/login_screen.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart'; // Import GoRouter
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -31,24 +31,27 @@ class _LoginScreenState extends State<LoginScreen> {
           email: email,
           password: password,
         );
+        if (context.mounted) {
+          GoRouter.of(context).go('/');
+        }
       } else {
         final nombre = _nombreController.text.trim();
-
         final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
           email: email,
           password: password,
         );
-
-        // Guardar en Firestore con rol 'medico'
         await FirebaseFirestore.instance
-            .collection('users')
-            .doc(cred.user!.uid)
-            .set({
+          .collection('users')
+          .doc(cred.user!.uid)
+          .set({
           'name': nombre,
           'email': email,
           'role': 'medico',
           'createdAt': Timestamp.now(),
         });
+        if (context.mounted) {
+          GoRouter.of(context).go('/');
+        }
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -90,7 +93,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   const SizedBox(height: 24),
-
                   if (!_isLogin)
                     TextFormField(
                       controller: _nombreController,
@@ -102,7 +104,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           value!.isEmpty ? 'Ingrese su nombre' : null,
                     ),
                   if (!_isLogin) const SizedBox(height: 16),
-
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
@@ -121,7 +122,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                   ),
                   const SizedBox(height: 16),
-
                   TextFormField(
                     controller: _passwordController,
                     obscureText: true,
@@ -135,7 +135,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             : null,
                   ),
                   const SizedBox(height: 16),
-
                   if (!_isLogin)
                     TextFormField(
                       controller: _confirmController,
@@ -150,7 +149,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               : null,
                     ),
                   if (!_isLogin) const SizedBox(height: 24),
-
                   ElevatedButton.icon(
                     onPressed: _submit,
                     icon: Icon(_isLogin ? Icons.login : Icons.person_add),
@@ -160,7 +158,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-
                   TextButton(
                     onPressed: () {
                       setState(() {

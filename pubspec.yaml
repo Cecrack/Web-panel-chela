@@ -6,13 +6,16 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.7.2
+  sdk: ^3.7.2 # Asegúrate de que tu SDK sea compatible con la versión de intl que elijas.
 
 dependencies:
   flutter:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
+
+  # Para formateo de fechas y números
+  intl: ^0.19.0 # <--- AÑADE ESTA LÍNEA
 
   # Firebase core & servicios
   firebase_core: ^2.25.0
@@ -25,6 +28,8 @@ dependencies:
   # PDF
   pdf: ^3.10.4
   printing: ^5.11.1
+
+  badges: ^3.1.1 # Añade esta línea (o la versión más reciente)
 
 dev_dependencies:
   flutter_test:
