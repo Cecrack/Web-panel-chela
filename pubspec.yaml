@@ -1,0 +1,35 @@
+name: chela_medic_web
+description: "A new Flutter project."
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.7.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # Firebase core & servicios
+  firebase_core: ^2.25.0
+  firebase_auth: ^4.17.4
+  cloud_firestore: ^4.17.5
+
+  # Navegación web moderna
+  go_router: ^13.0.0
+
+  # PDF
+  pdf: ^3.10.4
+  printing: ^5.11.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

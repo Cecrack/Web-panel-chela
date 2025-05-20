@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "78349546809",
+    "project_id": "chelamedic-e54a1",
+    "storage_bucket": "chelamedic-e54a1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:78349546809:android:03ec1336c144ccc44224e8",
+        "android_client_info": {
+          "package_name": "com.chelamedic.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCuBjjm9L7lJ1BwL71lRJEGKiHOnz8OIGA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:78349546809:android:2cb578f59d868c504224e8",
+        "android_client_info": {
+          "package_name": "com.example.chela_medic_web"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCuBjjm9L7lJ1BwL71lRJEGKiHOnz8OIGA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
