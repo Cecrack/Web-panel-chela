@@ -11,8 +11,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
+  google_fonts: ^6.2.1 # Asegúrate de usar la última versión
   cupertino_icons: ^1.0.8
+  rxdart: ^0.28.0
 
   # Para formateo de fechas y números
   intl: ^0.19.0 # <--- AÑADE ESTA LÍNEA

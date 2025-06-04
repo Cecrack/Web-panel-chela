@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart'; // Para formatear fechas
 
 class CitasScreen extends StatefulWidget {
-  // Las notifications ya no serían necesarias aquí, se manejan aparte si las quieres mostrar.
   const CitasScreen({super.key});
 
   @override
@@ -12,29 +11,23 @@ class CitasScreen extends StatefulWidget {
 }
 
 class _CitasScreenState extends State<CitasScreen> {
-  // Los campos de pacienteSeleccionado son para cuando el médico crea una cita
+  // Campos para la creación de una nueva cita por el médico
   String? _pacienteSeleccionadoId;
   String? _pacienteSeleccionadoNombre;
-  final _motivoController = TextEditingController();
+  final TextEditingController _motivoController = TextEditingController();
   DateTime? _fechaSeleccionada;
   TimeOfDay? _horaSeleccionada;
   String? _medicoUid;
-
-  // Los ScrollControllers y variables de paginación serían necesarios si usaras paginación para ambas listas.
-  // Para simplificar aquí, vamos a usar StreamBuilder sin paginación inicialmente para las solicitudes.
-  // Si necesitas paginación en ambas, duplica la lógica _loadMoreCitas para cada tipo de stream.
 
   @override
   void initState() {
     super.initState();
     _loadMedicoUid();
-    // No necesitamos _scrollController.addListener aquí si usamos StreamBuilder para cada lista
   }
 
   @override
   void dispose() {
     _motivoController.dispose();
-    // Si tienes scroll controllers específicos para cada lista, deséchalos aquí.
     super.dispose();
   }
 
@@ -44,28 +37,32 @@ class _CitasScreenState extends State<CitasScreen> {
       setState(() {
         _medicoUid = user.uid;
       });
-      // No llamar _loadMoreCitas aquí, los StreamBuilders lo harán
     } else {
+      // Considera mostrar un diálogo o redirigir si no hay usuario logueado.
       print("Error: CitasScreen cargado sin un médico logueado.");
-      // Podrías redirigir al login o mostrar un mensaje.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Por favor, inicia sesión para gestionar citas.')),
+        );
+      }
     }
   }
 
   // Función para crear una nueva cita (hecha por el médico)
   void _crearCita() async {
     if (_pacienteSeleccionadoId == null ||
-        _motivoController.text.isEmpty ||
+        _motivoController.text.trim().isEmpty ||
         _fechaSeleccionada == null ||
         _horaSeleccionada == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Completa todos los campos')),
+        const SnackBar(content: Text('Por favor, completa todos los campos de la cita')),
       );
       return;
     }
 
     if (_medicoUid == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error: UID del médico no disponible')),
+        const SnackBar(content: Text('Error: UID del médico no disponible. Intenta de nuevo.')),
       );
       return;
     }
@@ -78,92 +75,116 @@ class _CitasScreenState extends State<CitasScreen> {
       _horaSeleccionada!.minute,
     );
 
-    final fechaHoraLocal = fechaHoraCita.toLocal();
-
     try {
       await FirebaseFirestore.instance.collection('citas').add({
         'pacienteId': _pacienteSeleccionadoId,
-        'medicoId': _medicoUid, // Asignada al médico que la crea
+        'medicoId': _medicoUid,
         'motivo': _motivoController.text.trim(),
-        'fecha': Timestamp.fromDate(fechaHoraLocal),
-        'estado': 'aceptada', // O 'confirmada', 'pendiente', tú decides el estado inicial
+        'fecha': Timestamp.fromDate(fechaHoraCita), // Guarda la fecha y hora seleccionada
+        'estado': 'aceptada', // Estado inicial al crearla el médico
         'creadoEn': Timestamp.now(),
         'creadoPorMedico': true,
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cita creada exitosamente')),
-      );
-
-      _motivoController.clear();
-      _fechaSeleccionada = null;
-      _horaSeleccionada = null;
-      Navigator.pop(context); // Cierra el diálogo
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cita creada exitosamente')),
+        );
+        _motivoController.clear();
+        setState(() {
+          _fechaSeleccionada = null;
+          _horaSeleccionada = null;
+        });
+        Navigator.pop(context); // Cierra el diálogo
+      }
     } catch (e) {
       print("Error al crear cita: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al crear la cita: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al crear la cita: $e')),
+        );
+      }
     }
   }
 
   // Función para mostrar el diálogo de nueva cita
   void _mostrarDialogoNuevaCita() {
+    // Restablecer los campos del diálogo antes de mostrarlo
+    _motivoController.clear();
+    _fechaSeleccionada = null;
+    _horaSeleccionada = null;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Nueva cita para ${_pacienteSeleccionadoNombre ?? "Paciente"}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _motivoController,
-              decoration: const InputDecoration(labelText: 'Motivo'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter setState) {
+          return AlertDialog(
+            title: Text('Nueva cita para ${_pacienteSeleccionadoNombre ?? "Paciente"}'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _motivoController,
+                    decoration: const InputDecoration(
+                      labelText: 'Motivo de la cita',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 15),
+                  ListTile(
+                    title: Text(
+                      _fechaSeleccionada == null
+                          ? 'Seleccionar Fecha'
+                          : 'Fecha: ${DateFormat('dd/MM/yyyy').format(_fechaSeleccionada!)}',
+                    ),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: () async {
+                      final seleccionada = await showDatePicker(
+                        context: context,
+                        initialDate: _fechaSeleccionada ?? DateTime.now(),
+                        firstDate: DateTime.now().subtract(const Duration(days: 365)), // Permite un año atrás
+                        lastDate: DateTime.now().add(const Duration(days: 365 * 5)), // 5 años en el futuro
+                      );
+                      if (seleccionada != null) {
+                        setState(() => _fechaSeleccionada = seleccionada);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  ListTile(
+                    title: Text(
+                      _horaSeleccionada == null
+                          ? 'Seleccionar Hora'
+                          : 'Hora: ${_horaSeleccionada!.format(context)}',
+                    ),
+                    trailing: const Icon(Icons.access_time),
+                    onTap: () async {
+                      final seleccionada = await showTimePicker(
+                        context: context,
+                        initialTime: _horaSeleccionada ?? TimeOfDay.now(),
+                      );
+                      if (seleccionada != null) {
+                        setState(() => _horaSeleccionada = seleccionada);
+                      }
+                    },
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: () async {
-                final seleccionada = await showDatePicker(
-                  context: context,
-                  initialDate: DateTime.now(),
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime(2100),
-                );
-                if (seleccionada != null) {
-                  setState(() => _fechaSeleccionada = seleccionada);
-                }
-              },
-              child: const Text('Seleccionar fecha'),
-            ),
-            if (_fechaSeleccionada != null)
-              Text("Fecha: ${DateFormat('dd/MM/yyyy').format(_fechaSeleccionada!)}"),
-            const SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: () async {
-                final seleccionada = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.now(),
-                );
-                if (seleccionada != null) {
-                  setState(() => _horaSeleccionada = seleccionada);
-                }
-              },
-              child: const Text('Seleccionar hora'),
-            ),
-            if (_horaSeleccionada != null)
-              Text("Hora: ${_horaSeleccionada!.format(context)}"),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: _crearCita,
-            child: const Text('Guardar'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: _crearCita,
+                child: const Text('Guardar Cita'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -171,10 +192,10 @@ class _CitasScreenState extends State<CitasScreen> {
   // Función para determinar el color del estado de la cita
   Color _estadoColor(String estado) {
     switch (estado) {
-      case 'solicitada': // Cita solicitada por paciente, esperando asignación
-        return Colors.blueAccent;
-      case 'pendiente': // Cita que está en proceso, o esperando info
-        return Colors.orange;
+      case 'solicitada':
+        return Colors.blueAccent; // Cita solicitada por paciente, esperando asignación
+      case 'pendiente':
+        return Colors.orange; // Cita que está en proceso, o esperando info
       case 'aceptada':
         return Colors.green;
       case 'rechazada':
@@ -189,46 +210,92 @@ class _CitasScreenState extends State<CitasScreen> {
   // Función para actualizar el estado de la cita
   Future<void> _actualizarEstadoCita(String citaId, String nuevoEstado) async {
     try {
-      await FirebaseFirestore.instance
-          .collection('citas')
-          .doc(citaId)
-          .update({'estado': nuevoEstado});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cita ${nuevoEstado}a')),
-      );
-      // No necesitas setState para _citas aquí si usas StreamBuilder,
-      // el StreamBuilder se reconstruirá automáticamente con el cambio en Firestore.
+      await FirebaseFirestore.instance.collection('citas').doc(citaId).update({'estado': nuevoEstado});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cita marcada como $nuevoEstado')),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al actualizar el estado: $e')),
-      );
+      print("Error al actualizar estado de cita: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al actualizar el estado: $e')),
+        );
+      }
     }
   }
 
   // Función para asignar una cita solicitada al médico actual
   Future<void> _asignarCita(String citaId) async {
     if (_medicoUid == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error: No se pudo obtener el ID del médico.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error: No se pudo obtener el ID del médico.')),
+        );
+      }
       return;
     }
     try {
       await FirebaseFirestore.instance.collection('citas').doc(citaId).update({
         'medicoId': _medicoUid,
-        'estado': 'aceptada', // O el estado inicial que desees después de la asignación
+        'estado': 'aceptada', // Estado inicial después de la asignación
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cita asignada y aceptada.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cita asignada y aceptada.')),
+        );
+      }
     } catch (e) {
       print("Error al asignar cita: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al asignar la cita: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al asignar la cita: $e')),
+        );
+      }
     }
   }
 
+  // NUEVA FUNCIÓN: Eliminar Cita
+  Future<void> _eliminarCita(String citaId) async {
+    // Preguntar confirmación antes de eliminar
+    final bool? confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirmar Eliminación'),
+        content: const Text('¿Estás seguro de que quieres eliminar esta cita? Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Eliminar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      try {
+        await FirebaseFirestore.instance.collection('citas').doc(citaId).delete();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Cita eliminada exitosamente.')),
+          );
+        }
+      } catch (e) {
+        print("Error al eliminar cita: $e");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al eliminar la cita: $e')),
+          );
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -239,39 +306,40 @@ class _CitasScreenState extends State<CitasScreen> {
       );
     }
 
-    return DefaultTabController( // Envuelve con DefaultTabController
-      length: 2, // Número de pestañas: "Mis Citas" y "Solicitudes"
+    return DefaultTabController(
+      length: 2,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Gestión de Citas Médicas'),
-          bottom: const TabBar( // Agrega TabBar al AppBar
+          bottom: const TabBar(
             tabs: [
               Tab(text: 'Mis Citas', icon: Icon(Icons.calendar_today)),
               Tab(text: 'Solicitudes', icon: Icon(Icons.inbox)),
             ],
           ),
         ),
-        body: TabBarView( // Contenido de las pestañas
+        body: TabBarView(
           children: [
-            // Pestaña 1: Mis Citas (Creadas por mí o asignadas a mí y aceptadas/pendientes)
-            _buildMyCitasList(),
-            // Pestaña 2: Solicitudes de Pacientes (estado: 'solicitada')
-            _buildRequestedCitasList(),
+            _buildMyCitasTab(), // Pestaña de Mis Citas
+            _buildRequestedCitasTab(), // Pestaña de Solicitudes
           ],
         ),
         floatingActionButton: _pacienteSeleccionadoId != null
             ? FloatingActionButton.extended(
                 onPressed: _mostrarDialogoNuevaCita,
-                label: const Text("Agregar cita para paciente"),
+                label: Text("Agendar para: ${_pacienteSeleccionadoNombre ?? 'Paciente'}"),
                 icon: const Icon(Icons.add),
               )
-            : null,
+            : null, // No muestra FAB si no hay paciente seleccionado
       ),
     );
   }
 
-  // Widget para construir la lista de 'Mis Citas'
-  Widget _buildMyCitasList() {
+  // ********************************************
+  // ** Widgets de las pestañas **
+  // ********************************************
+
+  Widget _buildMyCitasTab() {
     return Column(
       children: [
         Padding(
@@ -279,24 +347,41 @@ class _CitasScreenState extends State<CitasScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("Seleccionar paciente (para crear nueva cita):"),
+              const Text(
+                "Seleccionar paciente (para crear nueva cita):",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 10),
               StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('users')
                     .where('role', isEqualTo: 'paciente')
+                    .orderBy('name') // Asegúrate de tener el índice compuesto para 'role' y 'name'
                     .snapshots(),
                 builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const CircularProgressIndicator();
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error al cargar pacientes: ${snapshot.error}'));
                   }
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
                   final pacientes = snapshot.data!.docs;
-                  return DropdownButton<String>(
-                    isExpanded: true,
+                  if (pacientes.isEmpty) {
+                    return const Text("No hay pacientes registrados con el rol 'paciente'.");
+                  }
+
+                  return DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Paciente',
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
                     value: _pacienteSeleccionadoId,
                     hint: const Text("Selecciona un paciente"),
+                    isExpanded: true,
                     items: pacientes.map((doc) {
-                      final nombre = doc['name'];
+                      final nombre = doc['name'] as String? ?? 'Nombre Desconocido';
                       return DropdownMenuItem(
                         value: doc.id,
                         child: Text(nombre),
@@ -306,23 +391,22 @@ class _CitasScreenState extends State<CitasScreen> {
                       setState(() {
                         _pacienteSeleccionadoId = value;
                         _pacienteSeleccionadoNombre = pacientes
-                            .firstWhere((doc) => doc.id == value)['name'];
+                            .firstWhere((doc) => doc.id == value)['name'] as String?;
                       });
                     },
                   );
                 },
               ),
               const SizedBox(height: 20),
-              Text(
-                "Citas asignadas a mí:",
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              const Text(
+                "Mis Citas Asignadas:",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ],
           ),
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            // Consulta para citas ASIGNADAS a este médico (incluye las que él creó)
             stream: FirebaseFirestore.instance
                 .collection('citas')
                 .where('medicoId', isEqualTo: _medicoUid)
@@ -339,7 +423,11 @@ class _CitasScreenState extends State<CitasScreen> {
               final citas = snapshot.data!.docs;
 
               if (citas.isEmpty) {
-                return const Center(child: Text("No tienes citas asignadas."));
+                return const Center(
+                    child: Text(
+                  "No tienes citas asignadas o creadas por ti.",
+                  textAlign: TextAlign.center,
+                ));
               }
 
               return ListView.builder(
@@ -347,47 +435,13 @@ class _CitasScreenState extends State<CitasScreen> {
                 itemBuilder: (context, index) {
                   final doc = citas[index];
                   final data = doc.data() as Map<String, dynamic>;
-                  final fecha = (data['fecha'] as Timestamp).toDate();
-                  final motivo = data['motivo'] ?? 'Sin motivo';
-                  final estado = data['estado'] ?? 'pendiente';
-                  final estadoColor = _estadoColor(estado);
-                  final pacienteIdDeCita = data['pacienteId'];
-
-                  return Card(
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: FutureBuilder<DocumentSnapshot>(
-                      future: FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(pacienteIdDeCita)
-                          .get(),
-                      builder: (context, pacienteSnapshot) {
-                        String pacienteNombre = 'Cargando...';
-                        if (pacienteSnapshot.hasData && pacienteSnapshot.data!.exists) {
-                          pacienteNombre = pacienteSnapshot.data!['name'] ?? 'Paciente Desconocido';
-                        } else if (pacienteSnapshot.hasError) {
-                          pacienteNombre = 'Error Paciente';
-                        }
-
-                        return ListTile(
-                          leading: Icon(Icons.circle, color: estadoColor, size: 14),
-                          title: Text('$motivo (Paciente: $pacienteNombre)'),
-                          subtitle: Text(
-                              "${DateFormat('dd/MM/yyyy HH:mm').format(fecha)}\nEstado: $estado"),
-                          trailing: PopupMenuButton<String>(
-                            onSelected: (nuevoEstado) {
-                              _actualizarEstadoCita(doc.id, nuevoEstado);
-                            },
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(value: 'pendiente', child: Text('Marcar Pendiente')),
-                              const PopupMenuItem(value: 'aceptada', child: Text('Marcar Aceptada')),
-                              const PopupMenuItem(value: 'rechazada', child: Text('Marcar Rechazada')),
-                              const PopupMenuItem(value: 'completada', child: Text('Marcar Completada')),
-                            ],
-                            child: Text(estado, style: TextStyle(color: estadoColor, fontWeight: FontWeight.bold)),
-                          ),
-                        );
-                      },
-                    ),
+                  return _CitaCard(
+                    citaData: data,
+                    citaId: doc.id,
+                    onUpdateStatus: _actualizarEstadoCita,
+                    onDeleteCita: _eliminarCita, // PASAR LA FUNCIÓN DE ELIMINAR
+                    estadoColor: _estadoColor(data['estado'] ?? 'pendiente'),
+                    showAssignButton: false, // No mostrar botón de asignar en 'Mis Citas'
                   );
                 },
               );
@@ -398,8 +452,7 @@ class _CitasScreenState extends State<CitasScreen> {
     );
   }
 
-  // Widget para construir la lista de 'Solicitudes de Pacientes'
-  Widget _buildRequestedCitasList() {
+  Widget _buildRequestedCitasTab() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -412,11 +465,10 @@ class _CitasScreenState extends State<CitasScreen> {
           const SizedBox(height: 10),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              // Consulta para citas SOLICITADAS por pacientes (medicoId es null o no existe, y estado es 'solicitada')
               stream: FirebaseFirestore.instance
                   .collection('citas')
                   .where('estado', isEqualTo: 'solicitada')
-                  // Opcional: También puedes añadir .where('medicoId', isNull: true) para mayor especificidad
+                  .where('medicoId', isNull: true) // Asegura que aún no tiene médico asignado
                   .orderBy('fecha')
                   .snapshots(),
               builder: (context, snapshot) {
@@ -438,38 +490,12 @@ class _CitasScreenState extends State<CitasScreen> {
                   itemBuilder: (context, index) {
                     final doc = citas[index];
                     final data = doc.data() as Map<String, dynamic>;
-                    final fecha = (data['fecha'] as Timestamp).toDate();
-                    final motivo = data['motivo'] ?? 'Sin motivo';
-                    final estado = data['estado'] ?? 'solicitada'; // Siempre 'solicitada' aquí
-                    final pacienteIdDeCita = data['pacienteId'];
-
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 6),
-                      child: FutureBuilder<DocumentSnapshot>(
-                        future: FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(pacienteIdDeCita)
-                            .get(),
-                        builder: (context, pacienteSnapshot) {
-                          String pacienteNombre = 'Cargando...';
-                          if (pacienteSnapshot.hasData && pacienteSnapshot.data!.exists) {
-                            pacienteNombre = pacienteSnapshot.data!['name'] ?? 'Paciente Desconocido';
-                          } else if (pacienteSnapshot.hasError) {
-                            pacienteNombre = 'Error Paciente';
-                          }
-
-                          return ListTile(
-                            leading: Icon(Icons.circle, color: _estadoColor(estado), size: 14),
-                            title: Text('$motivo (Paciente: $pacienteNombre)'),
-                            subtitle: Text(
-                                "${DateFormat('dd/MM/yyyy HH:mm').format(fecha)}\nEstado: $estado"),
-                            trailing: ElevatedButton(
-                              onPressed: () => _asignarCita(doc.id),
-                              child: const Text('Asignar a mí'),
-                            ),
-                          );
-                        },
-                      ),
+                    return _CitaCard(
+                      citaData: data,
+                      citaId: doc.id,
+                      onAssignCita: _asignarCita,
+                      estadoColor: _estadoColor(data['estado'] ?? 'solicitada'),
+                      showAssignButton: true, // Mostrar botón de asignar
                     );
                   },
                 );
@@ -477,6 +503,141 @@ class _CitasScreenState extends State<CitasScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ********************************************
+// ** Widget Separado para la Tarjeta de Cita **
+// ********************************************
+
+class _CitaCard extends StatelessWidget {
+  final Map<String, dynamic> citaData;
+  final String citaId;
+  final Function(String, String)? onUpdateStatus; // Para Mis Citas (cambiar estado)
+  final Function(String)? onAssignCita; // Para Solicitudes (asignar)
+  final Function(String)? onDeleteCita; // NUEVO: Para Mis Citas (eliminar)
+  final Color estadoColor;
+  final bool showAssignButton;
+
+  const _CitaCard({
+    required this.citaData,
+    required this.citaId,
+    this.onUpdateStatus,
+    this.onAssignCita,
+    this.onDeleteCita, // Nuevo parámetro
+    required this.estadoColor,
+    this.showAssignButton = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final DateTime fecha = (citaData['fecha'] as Timestamp).toDate();
+    final String motivo = citaData['motivo'] as String? ?? 'Sin motivo especificado';
+    final String estado = citaData['estado'] as String? ?? 'desconocido';
+    final String pacienteId = citaData['pacienteId'] as String;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                FutureBuilder<DocumentSnapshot>(
+                  future: FirebaseFirestore.instance.collection('users').doc(pacienteId).get(),
+                  builder: (context, pacienteSnapshot) {
+                    String pacienteNombre = 'Cargando paciente...';
+                    if (pacienteSnapshot.connectionState == ConnectionState.waiting) {
+                      pacienteNombre = 'Cargando...';
+                    } else if (pacienteSnapshot.hasData && pacienteSnapshot.data!.exists) {
+                      pacienteNombre = pacienteSnapshot.data!['name'] as String? ?? 'Paciente Desconocido';
+                    } else if (pacienteSnapshot.hasError) {
+                      pacienteNombre = 'Error al cargar paciente';
+                    } else {
+                      pacienteNombre = 'Paciente no encontrado';
+                    }
+                    return Flexible(
+                      child: Text(
+                        'Paciente: $pacienteNombre',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  },
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: estadoColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    estado.toUpperCase(),
+                    style: TextStyle(color: estadoColor, fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Motivo: $motivo',
+              style: const TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Fecha: ${DateFormat('dd/MM/yyyy - HH:mm').format(fecha)}',
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (showAssignButton)
+                  ElevatedButton.icon(
+                    onPressed: onAssignCita != null ? () => onAssignCita!(citaId) : null,
+                    icon: const Icon(Icons.person_add),
+                    label: const Text('Asignar a mí'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).primaryColor,
+                      foregroundColor: Colors.white,
+                    ),
+                  )
+                else // Si no es una solicitud, mostrar el menú de opciones
+                  PopupMenuButton<String>(
+                    onSelected: (action) {
+                      if (action == 'delete' && onDeleteCita != null) {
+                        onDeleteCita!(citaId);
+                      } else if (onUpdateStatus != null) {
+                        onUpdateStatus!(citaId, action);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(value: 'pendiente', child: Text('Marcar Pendiente')),
+                      const PopupMenuItem(value: 'aceptada', child: Text('Marcar Aceptada')),
+                      const PopupMenuItem(value: 'rechazada', child: Text('Marcar Rechazada')),
+                      const PopupMenuItem(value: 'completada', child: Text('Marcar Completada')),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Eliminar Cita', style: TextStyle(color: Colors.red)),
+                      ), // Opción de eliminar
+                    ],
+                    child: Chip(
+                      label: const Text('Opciones', style: TextStyle(color: Colors.white)),
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                      avatar: const Icon(Icons.more_vert, color: Colors.white),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
